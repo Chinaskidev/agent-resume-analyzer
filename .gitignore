@@ -43,3 +43,9 @@ test.db
 Thumbs.db
 
 # NOTA: la carpeta .claude/ (AGENT.md, skills, CLAUDE.md) SÍ se versiona — no se ignora.
+
+# entorno virtual
+.virtual
+
+# Notas locales personales
+todo.md
