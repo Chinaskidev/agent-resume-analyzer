@@ -10,14 +10,14 @@ description: Guía del motor de análisis de CVs de Ixtli. Usar cuando se trabaj
 `POST /analizar/` (multipart form: `archivo`, `titulo_de_trabajo`, `nombre_del_cliente`, `nombre_del_candidato` opcional) ejecuta este pipeline en `main.py`:
 
 1. **Lookup en DB**: busca `Cliente` por nombre y `Trabajo` por título + cliente. Si no existen devuelve `{"error": ...}` con HTTP 200 (ojo: no usa códigos de error HTTP).
-2. **Contexto del puesto**: concatena `trabajo.funciones` y `trabajo.perfil` en strings separados por coma ("No especificado" si están vacíos).
-3. **`extraer_texto(archivo)`**: PyPDF2 para `.pdf`, docx2txt para `.docx`. Devuelve el texto en minúsculas. Cualquier otra extensión devuelve string vacío sin error.
-4. **`generar_feedback(...)`**: detecta el idioma del CV con langdetect (`detectar_idioma`) y llama al LLM con un prompt que pide fortalezas/debilidades, nivel de cumplimiento y recomendación final. Responde en inglés solo si el CV está en inglés; español para todo lo demás.
-5. **`similitud_semantica(...)`**: similitud coseno entre embeddings del CV y de las funciones del trabajo con `all-MiniLM-L6-v2` (carga global al iniciar, ~80MB de descarga la primera vez).
-6. **`puntuacion(match_score)`**: calibra el coseno a escala 0–10 con mapeo lineal del rango real de MiniLM [0.20, 0.75]. Decisión: ≥8 "Alto", ≥7 "Promedio Alto", ≥6 "Promedio Bajo", ≥4 "Bajo", si no "Deficiente".
+2. **Contexto del puesto**: concatena `trabajo.funciones`, `trabajo.habilidades` y `trabajo.perfil` en strings separados por coma ("No especificado" si están vacíos).
+3. **`extraer_texto(archivo)`**: PyPDF2 para `.pdf`, docx2txt para `.docx`. Devuelve el texto en minúsculas. Cualquier otra extensión devuelve string vacío sin error. Luego `detectar_idioma` (langdetect) clasifica el CV como `en` o `es`.
+4. **`generar_feedback(...)`**: llama al LLM con la plantilla del idioma detectado. Las plantillas viven en **`prompts.py`** (la "guía de trabajo" del agente): una completa por idioma, porque un modelo 8B sigue el idioma dominante del prompt — una sola línea de "responde en inglés" no funciona.
+5. **`calcular_match_score(...)`**: el CV se divide en fragmentos con solape (`fragmentar`, el modelo trunca a ~128 tokens y si no solo "leería" el inicio del CV); por cada componente del puesto se toma el fragmento que mejor matchea (max de cosenos) y se promedia ponderado: funciones 50%, habilidades 30%, perfil 20%. Componentes vacíos se excluyen y los pesos se renormalizan. Embeddings con `paraphrase-multilingual-MiniLM-L12-v2` (multilingüe es/en — el `all-MiniLM-L6-v2` original era solo inglés y daba cosenos bajísimos con CVs en español; carga global al iniciar, ~470MB de descarga la primera vez).
+6. **`puntuacion(match_score)`**: calibra el coseno a escala 0–10 con mapeo lineal del rango real observado [0.25, 0.65]. Decisión: ≥8 "Alto", ≥7 "Promedio Alto", ≥6 "Promedio Bajo", ≥4 "Bajo", si no "Deficiente". Referencia empírica: CV backend real vs puesto backend ≈ 0.57 → 8.0 "Alto"; CV de chef vs el mismo puesto ≈ 0.19 → 0 "Deficiente".
 7. **Persistencia**: guarda el análisis en la tabla `analisis` (incluido `raw_score`, el coseno original, para recalibrar PISO/TECHO con datos reales).
 
-Respuesta: `{id, archivo, titulo_trabajo, nombre_del_candidato, match_score (0-10), decision, feedback, creado_en}`.
+Respuesta: `{id, archivo, titulo_trabajo, nombre_del_candidato, idioma, match_score (0-10), decision, feedback, creado_en}`.
 
 `GET /analisis/` lista el historial (sin el campo `feedback`, que contiene datos del CV).
 
@@ -70,7 +70,8 @@ Tablas y modelos en español, definidos en `database.py`, migraciones con Alembi
 ## Trampas conocidas
 
 - Los errores de negocio se devuelven como `{"error": ...}` con HTTP 200; el frontend depende de esto, no lo cambies sin coordinar.
-- `match_score` compara contra las **funciones** del trabajo, no contra habilidades ni perfil. Los límites de calibración PISO=0.20/TECHO=0.75 en `puntuacion()` se eligieron a ojo — recalibrar con la distribución de `raw_score` cuando haya análisis reales acumulados.
+- Los pesos del match (funciones 0.5 / habilidades 0.3 / perfil 0.2) se eligieron a ojo; los límites PISO=0.25/TECHO=0.65 en `puntuacion()` se calibraron con un solo CV real — recalibrar con la distribución de `raw_score` cuando haya análisis acumulados. Ojo: los `raw_score` guardados antes del cambio de modelo (junio 2026) no son comparables con los nuevos.
+- Para cambiar cómo analiza el agente (reglas, formato, idiomas) se edita `prompts.py`, no el código de `main.py`. Si se agrega un idioma hay que añadir su clave en `PROMPT_SISTEMA` y `PLANTILLA_ANALISIS` y mapearlo en el endpoint.
 - CORS permite solo `localhost:3000` y `frontend-resume-analyzer.vercel.app`; si el frontend cambia de dominio hay que tocar `main.py`. El frontend viejo espera la API en inglés (`/analyze/`, `match_score` 0–1) — quedó incompatible desde el issue-6; se va a crear una interfaz nueva.
 - Los CVs son datos personales: no loguear `texto_cv` ni guardarlo sin necesidad (el feedback guardado en `analisis` ya contiene extractos del CV — no exponerlo en listados públicos).
 - Nunca imprimir API keys al arrancar (el repo original lo hacía).

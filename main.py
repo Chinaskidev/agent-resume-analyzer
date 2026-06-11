@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from database import Analisis, Funcion, Perfil, SessionLocal, Cliente, Trabajo, Habilidad
 from langdetect import detect, DetectorFactory, LangDetectException
+from prompts import PROMPT_SISTEMA, PLANTILLA_ANALISIS
 
 DetectorFactory.seed = 0  # langdetect es no-determinista sin seed fija
 
@@ -46,8 +47,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Modelo NLP para similitud semántica.
-modelo_semantico = SentenceTransformer("all-MiniLM-L6-v2")
+# Modelo NLP para similitud semántica (multilingüe es/en;
+# all-MiniLM-L6-v2 era solo inglés y daba cosenos bajos con CVs en español).
+modelo_semantico = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
 
 #Endpoint para **añadir trabajos y habilidades**
@@ -150,69 +152,67 @@ def detectar_idioma(texto: str) -> str:
     except LangDetectException:
         return "es"
 
-# Función para calcular la similitud semántica entre el CV y la descripción del trabajo
-def similitud_semantica(texto_cv: str, funciones_del_trabajo: str) -> float:
-    embeddings = modelo_semantico.encode([texto_cv, funciones_del_trabajo], convert_to_tensor=True)
-    score = util.pytorch_cos_sim(embeddings[0], embeddings[1]).item()
+# Divide el CV en fragmentos con solape: el modelo trunca la entrada
+# (~128 tokens), asi que con el texto completo solo "leeria" el inicio del CV.
+def fragmentar(texto: str, tamano: int = 150, solape: int = 30) -> list:
+    palabras = texto.split()
+    paso = tamano - solape
+    return [" ".join(palabras[i:i + tamano]) for i in range(0, max(len(palabras) - solape, 1), paso)]
+
+# Calcula el match score entre el CV y el puesto completo: funciones, habilidades y perfil.
+# Por cada componente toma el fragmento del CV que mejor matchea (max), y luego
+# promedia ponderado; los componentes vacios se excluyen y los pesos se renormalizan.
+def calcular_match_score(texto_cv: str, funciones_del_trabajo: str, habilidades: str, perfil_del_trabajador: str) -> float:
+    componentes = [
+        (funciones_del_trabajo, 0.5),
+        (habilidades, 0.3),
+        (perfil_del_trabajador, 0.2),
+    ]
+    validos = [(texto, peso) for texto, peso in componentes if texto and texto != "No especificado"]
+    if not validos or not texto_cv.strip():
+        return 0.0
+
+    fragmentos = fragmentar(texto_cv)
+    embeddings = modelo_semantico.encode(fragmentos + [texto for texto, _ in validos], convert_to_tensor=True)
+    n = len(fragmentos)
+    peso_total = sum(peso for _, peso in validos)
+    score = sum(
+        max(util.pytorch_cos_sim(embeddings[i], embeddings[n + j]).item() for i in range(n)) * peso
+        for j, (_, peso) in enumerate(validos)
+    ) / peso_total
     return round(score, 2)
 
-# Generar un feedback detallado usando el LLM (Ministral via Ollama)
-def generar_feedback(texto_cv: str, nombre_del_cliente: str, funciones_del_trabajo: str, perfil_del_trabajador: str) -> str:
+# Generar un feedback detallado usando el LLM (Ministral via Ollama).
+# Las plantillas viven en prompts.py: una completa por idioma, porque un modelo 8B
+# sigue el idioma dominante del prompt aunque se le pida responder en otro.
+def generar_feedback(texto_cv: str, nombre_del_cliente: str, funciones_del_trabajo: str, habilidades: str, perfil_del_trabajador: str, idioma: str) -> str:
 
-    idioma_cv = detectar_idioma(texto_cv)
-    idioma_respuesta = "English" if idioma_cv == "en" else "Spanish"
-
-    prompt = f"""
-Los siguientes datos provienen de la base de datos interna del cliente.
-
-## Cliente
-{nombre_del_cliente}
-
-## Perfil requerido (base de datos)
-{perfil_del_trabajador}
-
-## Funciones del puesto (base de datos)
-{funciones_del_trabajo}
-
-## Currículum del candidato
-{texto_cv}
-
-## Tareas
-1. Identificar fortalezas relevantes para el puesto.
-2. Identificar debilidades o brechas frente al perfil requerido.
-3. Evaluar el nivel de cumplimiento del perfil (Alto / Medio / Bajo).
-4. Emitir una recomendación final clara y profesional.
-
-## Formato obligatorio
-- **Fortalezas**
-- **Debilidades**
-- **Nivel de cumplimiento**
-- **Recomendación final**
-"""
-
-    prompt_de_sistema = f"""Eres un motor profesional de análisis de currículums usado en procesos de selección.
-MANDATORY: Responde solo en {idioma_respuesta}. No uses otro idioma.
-Reglas:
-- No inventes información.
-- No asumas experiencia no presente en el CV.
-- No recalcules puntuaciones numéricas.
-- Limítate a analizar y justificar los datos proporcionados."""
+    prompt = PLANTILLA_ANALISIS[idioma].format(
+        nombre_del_cliente=nombre_del_cliente,
+        perfil_del_trabajador=perfil_del_trabajador,
+        habilidades=habilidades,
+        funciones_del_trabajo=funciones_del_trabajo,
+        texto_cv=texto_cv,
+    )
 
     respuesta = cliente_llm.chat.completions.create(
         model=LLM_MODEL,
-        messages=[{"role": "system", "content": prompt_de_sistema},
+        messages=[{"role": "system", "content": PROMPT_SISTEMA[idioma]},
                   {"role": "user", "content": prompt}]
     )
     return respuesta.choices[0].message.content
 
 
 # Calibra el coseno (0-1) a una escala 0-10.
-# En la practica MiniLM da cosenos entre ~0.20 (sin relacion) y ~0.75 (match muy fuerte):
-# ese rango real se mapea linealmente a 0-10, sin saltos.
+# Con el modelo multilingue y el match por fragmentos, los cosenos reales van de
+# ~0.25 (sin relacion) a ~0.65 (match muy fuerte): ese rango se mapea linealmente
+# a 0-10, sin saltos. Recalibrar con la distribucion de raw_score acumulada.
 def puntuacion(match_score: float):
-    PISO, TECHO = 0.20, 0.75
+    PISO, TECHO = 0.25, 0.65
     normalizado = (match_score - PISO) / (TECHO - PISO)
-    score = max(0.0, min(1.0, normalizado)) * 10
+    # Redondear antes de decidir: evita que un 7.9999 por floats muestre
+    # "8.0" con decision "Promedio Alto"
+    score = round(max(0.0, min(1.0, normalizado)) * 10, 2)
 
     if score >= 8.0:
         decision = "Alto"
@@ -225,7 +225,7 @@ def puntuacion(match_score: float):
     else:
         decision = "Deficiente"
 
-    return round(score, 2), decision
+    return score, decision
 
 
 #Analizar un CV y obtener políticas del cliente
@@ -247,18 +247,18 @@ async def analizar_cv(
     if not trabajo:
         return {"error": "Trabajo no encontrado"}
 
-    # Obtener funciones del trabajo (via relacion, evita errores si no hay datos)
+    # Obtener funciones, habilidades y perfil del trabajo (via relaciones)
     funciones_del_trabajo = ", ".join([f.titulo for f in trabajo.funciones]) if trabajo.funciones else "No especificado"
-
-    # Obtener perfil del trabajador
+    habilidades = ", ".join([h.nombre for h in trabajo.habilidades]) if trabajo.habilidades else "No especificado"
     perfil_del_trabajador = ", ".join([p.nombre for p in trabajo.perfil]) if trabajo.perfil else "No especificado"
 
-    # Extraer texto del CV
+    # Extraer texto del CV y detectar su idioma (es/en)
     texto_cv = extraer_texto(archivo)
+    idioma = "en" if detectar_idioma(texto_cv) == "en" else "es"
 
-    feedback = generar_feedback(texto_cv, cliente.nombre, funciones_del_trabajo, perfil_del_trabajador)
+    feedback = generar_feedback(texto_cv, cliente.nombre, funciones_del_trabajo, habilidades, perfil_del_trabajador, idioma)
 
-    match_score = similitud_semantica(texto_cv, funciones_del_trabajo)
+    match_score = calcular_match_score(texto_cv, funciones_del_trabajo, habilidades, perfil_del_trabajador)
 
     puntuacion_calibrada, decision = puntuacion(match_score)
 
@@ -282,6 +282,7 @@ async def analizar_cv(
         "archivo": archivo.filename,
         "titulo_trabajo": trabajo.titulo,
         "nombre_del_candidato": nombre_del_candidato,
+        "idioma": idioma,
         "match_score": puntuacion_calibrada,
         "decision": decision,
         "feedback": nuevo_analisis.feedback,
