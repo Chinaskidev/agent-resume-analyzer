@@ -46,3 +46,6 @@ Thumbs.db
 
 # entorno virtual
 .virtual
+
+# Notas locales personales
+todo.md
