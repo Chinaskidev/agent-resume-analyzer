@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Qué es este proyecto
 
-"Ixtli": API backend en FastAPI para analizar currículums (CV) contra puestos de trabajo definidos por clientes. Combina similitud semántica (sentence-transformers, local) con feedback generado por un LLM (`gpt-4o-mini`). Se despliega en Railway (API + PostgreSQL); el frontend vive en otro repo (`frontend-resume-analyzer` en Vercel).
+"Ixtli": API backend en FastAPI para analizar currículums (CV) contra puestos de trabajo definidos por clientes. Combina similitud semántica (sentence-transformers, local) con feedback generado por un LLM (Ministral 3 8B vía Ollama por defecto, configurable por env vars). Se despliega en Railway (API + PostgreSQL); el frontend vive en otro repo (`frontend-resume-analyzer` en Vercel) y será reemplazado por una interfaz nueva.
 
 ## Documentación principal
 

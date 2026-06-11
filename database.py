@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Integer, ForeignKey
+from sqlalchemy import Float, create_engine, Column, String, Integer, ForeignKey, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import os
@@ -21,57 +21,74 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 #Modelo Cliente
-class Client(Base):
+class Cliente(Base):
     __tablename__ = "clientes"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True, nullable=False)
+    nombre = Column(String, unique=True, index=True, nullable=False)
 
-    jobs = relationship("Job", back_populates="client", cascade="all, delete")
+    trabajos = relationship("Trabajo", back_populates="cliente", cascade="all, delete")
 
 #Modelo Trabajo
-class Job(Base):
+class Trabajo(Base):
     __tablename__ = "tipos_de_trabajo"
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True, nullable=False)
-    client_id = Column(Integer, ForeignKey("clientes.id", ondelete="CASCADE"), nullable=False)
+    titulo = Column(String, index=True, nullable=False)
+    cliente_id = Column(Integer, ForeignKey("clientes.id", ondelete="CASCADE"), nullable=False)
 
-    client = relationship("Client", back_populates="jobs")
-    skills = relationship("Skill", back_populates="job", cascade="all, delete")
-    functions = relationship("Function", back_populates="job", cascade="all, delete")
-    profile = relationship("Profile", back_populates="job", cascade="all, delete")
+    cliente = relationship("Cliente", back_populates="trabajos")
+    habilidades = relationship("Habilidad", back_populates="trabajo", cascade="all, delete")
+    funciones = relationship("Funcion", back_populates="trabajo", cascade="all, delete")
+    perfil = relationship("Perfil", back_populates="trabajo", cascade="all, delete")
+    analisis = relationship("Analisis", back_populates="trabajo", cascade="all, delete")
 
 #Modelo Funciones del Trabajo
-class Function(Base):
+class Funcion(Base):
     __tablename__ = "funciones_del_trabajo"
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True, nullable=False)
-    job_id = Column(Integer, ForeignKey("tipos_de_trabajo.id", ondelete="CASCADE"), nullable=False)
+    titulo = Column(String, index=True, nullable=False)
+    trabajo_id = Column(Integer, ForeignKey("tipos_de_trabajo.id", ondelete="CASCADE"), nullable=False)
 
-    job = relationship("Job", back_populates="functions")
+    trabajo = relationship("Trabajo", back_populates="funciones")
 
 #Modelo Perfil del Trabajo
-class Profile(Base):
+class Perfil(Base):
     __tablename__ = "perfil_del_trabajador"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    job_id = Column(Integer, ForeignKey("tipos_de_trabajo.id", ondelete="CASCADE"), nullable=False)
+    nombre = Column(String, nullable=False)
+    trabajo_id = Column(Integer, ForeignKey("tipos_de_trabajo.id", ondelete="CASCADE"), nullable=False)
 
-    job = relationship("Job", back_populates="profile")
+    trabajo = relationship("Trabajo", back_populates="perfil")
 
 #Modelo Habilidades
-class Skill(Base):
+class Habilidad(Base):
     __tablename__ = "habilidades"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    job_id = Column(Integer, ForeignKey("tipos_de_trabajo.id", ondelete="CASCADE"), nullable=False)
+    nombre = Column(String, nullable=False)
+    trabajo_id = Column(Integer, ForeignKey("tipos_de_trabajo.id", ondelete="CASCADE"), nullable=False)
 
-    job = relationship("Job", back_populates="skills")
+    trabajo = relationship("Trabajo", back_populates="habilidades")
+
+#Modelo Analisis (historial de CVs analizados)
+class Analisis(Base):
+    __tablename__ = "analisis"
+    id = Column(Integer, primary_key=True, index=True)
+    nombre_del_candidato = Column(String, nullable=True)
+    archivo = Column(String, nullable=False)
+    titulo_trabajo = Column(String, nullable=False)
+    match_score = Column(Float, nullable=False)   # puntaje calibrado 0-10
+    raw_score = Column(Float, nullable=False)     # coseno original 0-1, para recalibrar con datos reales
+    decision = Column(String, nullable=False)
+    feedback = Column(String, nullable=False)
+    creado_en = Column(DateTime, server_default=func.now())
+    trabajo_id = Column(Integer, ForeignKey("tipos_de_trabajo.id", ondelete="CASCADE"), nullable=False)
+
+    trabajo = relationship("Trabajo", back_populates="analisis")
 
 #Crear las tablas en PostgreSQL
-def create_tables():
+def crear_tablas():
     print("Creando tablas en la base de datos...")
     Base.metadata.create_all(bind=engine)
     print("¡Tablas creadas correctamente!")
 
 if __name__ == "__main__":
-    create_tables()
+    crear_tablas()
