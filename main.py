@@ -14,14 +14,13 @@ from database import Function, Profile, SessionLocal, Client, Job, Skill
 # Cargar variables de entorno
 load_dotenv(override=True)
 
-# Verificar que la API Key de OpenAI está configurada
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise ValueError("ERROR: La API Key de OpenAI no se encontró.")
+# Configuracion del LLM-va ser compatible igual con OPENAI
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1") #ollama
+LLM_API_KEY = os.getenv("LLM_API_KEY", "ollama") #ollama lo ignora pero el SDK exige un valor
+LLM_MODEL = os.getenv("LLM_MODEL", "ministral-3:8b") #MODELO Ministral
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
 
-print("API Key cargada en el backend:", os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
@@ -182,7 +181,7 @@ def generate_gpt_feedback(resume_text: str, nombre_del_cliente: str, funciones_d
     """
 
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=LLM_MODEL,
         messages=[{"role": "system", "content": "Eres un experto en selección de talento humano."},
                   {"role": "user", "content": prompt}]
     )
