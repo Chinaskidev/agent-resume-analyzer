@@ -1,9 +1,9 @@
 ---
 name: resume-analyzer
-description: Guía del motor de análisis de CVs de Skinner. Usar cuando se trabaje en el endpoint /analyze/, el match score semántico, el feedback con LLM (OpenAI o modelo local Ministral/Ollama), la extracción de texto de PDF/DOCX, o al correr/desplegar este backend FastAPI. Use when working on resume analysis, semantic matching, LLM feedback, or running this FastAPI backend.
+description: Guía del motor de análisis de CVs de Ixtli. Usar cuando se trabaje en el endpoint /analyze/, el match score semántico, el feedback con LLM (OpenAI o modelo local Ministral/Ollama), la extracción de texto de PDF/DOCX, o al correr/desplegar este backend FastAPI. Use when working on resume analysis, semantic matching, LLM feedback, or running this FastAPI backend.
 ---
 
-# Motor de análisis de CVs (Skinner)
+# Motor de análisis de CVs (Ixtli)
 
 ## Flujo del análisis
 

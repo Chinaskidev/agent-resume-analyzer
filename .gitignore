@@ -1,0 +1,45 @@
+# Entornos virtuales
+venv/
+.venv/
+env/
+ENV/
+
+# Variables de entorno y secretos
+.env
+.env.*
+*.env
+
+# Cache de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Empaquetado / distribución
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Modelos descargados y cache de Hugging Face
+.cache/
+models/
+
+# Bases de datos locales de prueba
+*.sqlite3
+*.db
+test.db
+
+# Logs
+*.log
+
+# Editores / IDE
+.vscode/
+.idea/
+*.swp
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# NOTA: la carpeta .claude/ (AGENT.md, skills, CLAUDE.md) SÍ se versiona — no se ignora.
