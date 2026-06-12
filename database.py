@@ -75,8 +75,9 @@ class Analisis(Base):
     nombre_del_candidato = Column(String, nullable=True)
     archivo = Column(String, nullable=False)
     titulo_trabajo = Column(String, nullable=False)
-    match_score = Column(Float, nullable=False)   # puntaje calibrado 0-10
+    match_score = Column(Float, nullable=False)   # puntaje final hibrido 0-10
     raw_score = Column(Float, nullable=False)     # coseno original 0-1, para recalibrar con datos reales
+    puntaje_llm = Column(Float, nullable=True)    # puntuacion 0-10 que dio el LLM (None si no se pudo parsear)
     decision = Column(String, nullable=False)
     feedback = Column(String, nullable=False)
     creado_en = Column(DateTime, server_default=func.now())

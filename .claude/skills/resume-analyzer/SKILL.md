@@ -14,10 +14,10 @@ description: Guía del motor de análisis de CVs de Ixtli. Usar cuando se trabaj
 3. **`extraer_texto(archivo)`**: PyPDF2 para `.pdf`, docx2txt para `.docx`. Devuelve el texto en minúsculas. Cualquier otra extensión devuelve string vacío sin error. Luego `detectar_idioma` (langdetect) clasifica el CV como `en` o `es`.
 4. **`generar_feedback(...)`**: llama al LLM con la plantilla del idioma detectado. Las plantillas viven en **`prompts.py`** (la "guía de trabajo" del agente): una completa por idioma, porque un modelo 8B sigue el idioma dominante del prompt — una sola línea de "responde en inglés" no funciona.
 5. **`calcular_match_score(...)`**: el CV se divide en fragmentos con solape (`fragmentar`, el modelo trunca a ~128 tokens y si no solo "leería" el inicio del CV); por cada componente del puesto se toma el fragmento que mejor matchea (max de cosenos) y se promedia ponderado: funciones 50%, habilidades 30%, perfil 20%. Componentes vacíos se excluyen y los pesos se renormalizan. Embeddings con `paraphrase-multilingual-MiniLM-L12-v2` (multilingüe es/en — el `all-MiniLM-L6-v2` original era solo inglés y daba cosenos bajísimos con CVs en español; carga global al iniciar, ~470MB de descarga la primera vez).
-6. **`puntuacion(match_score)`**: calibra el coseno a escala 0–10 con mapeo lineal del rango real observado [0.25, 0.65]. Decisión: ≥8 "Alto", ≥7 "Promedio Alto", ≥6 "Promedio Bajo", ≥4 "Bajo", si no "Deficiente". Referencia empírica: CV backend real vs puesto backend ≈ 0.57 → 8.0 "Alto"; CV de chef vs el mismo puesto ≈ 0.19 → 0 "Deficiente".
-7. **Persistencia**: guarda el análisis en la tabla `analisis` (incluido `raw_score`, el coseno original, para recalibrar PISO/TECHO con datos reales).
+6. **Puntaje híbrido**: `calibrar_puntuacion` mapea el coseno del rango real [0.25, 0.65] a 0–10 (mide si el CV es del *rubro* correcto), `extraer_puntuacion_llm` parsea la línea `PUNTUACION: X/10` / `SCORE: X/10` del feedback (mide la *calificación* real), y `combinar_puntuaciones` pondera ambos con `PESO_SEMANTICO`. Si el LLM no devuelve puntuación parseable, queda solo el semántico. `decidir`: ≥8 "Alto", ≥7 "Promedio Alto", ≥6 "Promedio Bajo", ≥4 "Bajo", si no "Deficiente".
+7. **Persistencia**: guarda el análisis en la tabla `analisis`, incluidos `raw_score` (coseno original) y `puntaje_llm`, para recalibrar pesos y umbrales con datos reales.
 
-Respuesta: `{id, archivo, titulo_trabajo, nombre_del_candidato, idioma, match_score (0-10), decision, feedback, creado_en}`.
+Respuesta: `{id, archivo, titulo_trabajo, nombre_del_candidato, idioma, match_score (0-10 híbrido), puntaje_semantico, puntaje_llm, decision, feedback, creado_en}`.
 
 `GET /analisis/` lista el historial (sin el campo `feedback`, que contiene datos del CV).
 
@@ -70,7 +70,9 @@ Tablas y modelos en español, definidos en `database.py`, migraciones con Alembi
 ## Trampas conocidas
 
 - Los errores de negocio se devuelven como `{"error": ...}` con HTTP 200; el frontend depende de esto, no lo cambies sin coordinar.
-- Los pesos del match (funciones 0.5 / habilidades 0.3 / perfil 0.2) se eligieron a ojo; los límites PISO=0.25/TECHO=0.65 en `puntuacion()` se calibraron con un solo CV real — recalibrar con la distribución de `raw_score` cuando haya análisis acumulados. Ojo: los `raw_score` guardados antes del cambio de modelo (junio 2026) no son comparables con los nuevos.
+- **Los embeddings no miden calificación, solo afinidad temática**: un data scientist senior y uno flojo dan cosenos casi iguales (~0.45 vs ~0.43); E5 multilingüe se probó y es peor (comprime todo a 0.82–0.86, hasta un chef contra un puesto técnico). Por eso el puntaje es híbrido con el LLM — no intentar "arreglar" la separación cambiando solo el modelo de embeddings.
+- Los pesos del match (funciones 0.5 / habilidades 0.3 / perfil 0.2), `PESO_SEMANTICO` y PISO=0.25/TECHO=0.65 se calibraron con pocos CVs reales — recalibrar con `raw_score`/`puntaje_llm` acumulados. Los `raw_score` previos al cambio de modelo (junio 2026) no son comparables.
+- La calidad de los datos del puesto importa: funciones cargadas como párrafos de filosofía o habilidades abstractas ("Fundamentos Matemáticos") degradan el match semántico — cargar tareas y herramientas concretas que aparezcan en un CV.
 - Para cambiar cómo analiza el agente (reglas, formato, idiomas) se edita `prompts.py`, no el código de `main.py`. Si se agrega un idioma hay que añadir su clave en `PROMPT_SISTEMA` y `PLANTILLA_ANALISIS` y mapearlo en el endpoint.
 - CORS permite solo `localhost:3000` y `frontend-resume-analyzer.vercel.app`; si el frontend cambia de dominio hay que tocar `main.py`. El frontend viejo espera la API en inglés (`/analyze/`, `match_score` 0–1) — quedó incompatible desde el issue-6; se va a crear una interfaz nueva.
 - Los CVs son datos personales: no loguear `texto_cv` ni guardarlo sin necesidad (el feedback guardado en `analisis` ya contiene extractos del CV — no exponerlo en listados públicos).
