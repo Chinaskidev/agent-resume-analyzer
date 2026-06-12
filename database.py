@@ -1,4 +1,4 @@
-from sqlalchemy import Float, create_engine, Column, String, Integer, ForeignKey, DateTime, func
+from sqlalchemy import Boolean, Float, create_engine, Column, String, Integer, ForeignKey, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import os
@@ -78,6 +78,7 @@ class Analisis(Base):
     match_score = Column(Float, nullable=False)   # puntaje final hibrido 0-10
     raw_score = Column(Float, nullable=False)     # coseno original 0-1, para recalibrar con datos reales
     puntaje_llm = Column(Float, nullable=True)    # puntuacion 0-10 que dio el LLM (None si no se pudo parsear)
+    alerta_inyeccion = Column(Boolean, nullable=False, server_default="false")  # CV con patrones de inyeccion de prompt
     decision = Column(String, nullable=False)
     feedback = Column(String, nullable=False)
     creado_en = Column(DateTime, server_default=func.now())

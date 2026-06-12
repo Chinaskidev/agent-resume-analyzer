@@ -49,6 +49,10 @@ if vista == "Analizar CV":
         if "error" in resultado:
             st.error(resultado["error"])
         else:
+            if resultado.get("alerta_inyeccion"):
+                st.warning("⚠️ Este CV contiene texto que intenta manipular el análisis "
+                           "(posible texto invisible en el PDF). El puntaje del LLM fue "
+                           "descartado y se usó solo el match semántico. Revisar manualmente.")
             col1, col2, col3 = st.columns(3)
             col1.metric("Match score", f"{resultado['match_score']}/10")
             col2.metric("Decisión", resultado["decision"])
