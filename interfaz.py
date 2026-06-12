@@ -8,7 +8,7 @@ API_URL = os.getenv("API_URL", "http://localhost:8000")
 st.set_page_config(page_title="Ixtli - Analizador de CVs", page_icon="📄", layout="wide")
 
 st.sidebar.title("📄 Ixtli")
-vista = st.sidebar.radio("Menú", ["Analizar CV", "Agregar puesto", "Buscar análisis"])
+vista = st.sidebar.radio("Menú", ["Analizar CV", "Agregar puesto", "Buscar análisis", "Reporte por puesto"])
 
 
 if vista == "Analizar CV":
@@ -146,3 +146,65 @@ elif vista == "Buscar análisis":
             file_name=f"ixtli_analisis_{opciones[seleccion]}.pdf",
             mime="application/pdf",
         )
+
+
+elif vista == "Reporte por puesto":
+    st.title("Reporte comparativo de candidatos")
+
+    clientes = requests.get(f"{API_URL}/clientes/", timeout=10).json()
+    nombres = [c["nombre"] for c in clientes]
+    if not nombres:
+        st.warning("No hay clientes todavía. Crea un puesto primero en 'Agregar puesto'.")
+        st.stop()
+
+    nombre_del_cliente = st.selectbox("Cliente", nombres)
+
+    trabajos = requests.get(f"{API_URL}/obtener_trabajos_por_cliente/{nombre_del_cliente}", timeout=10).json()
+    if not isinstance(trabajos, list) or not trabajos:
+        st.warning("Este cliente no tiene puestos registrados.")
+        st.stop()
+
+    puestos = {t["titulo"]: t["id"] for t in trabajos}
+    titulo = st.selectbox("Puesto", list(puestos.keys()))
+
+    # idioma del cliente que recibe el reporte (no el de los CVs)
+    idiomas = {"Español": "es", "English": "en"}
+    idioma = idiomas[st.selectbox("Idioma del reporte", list(idiomas.keys()))]
+
+    if st.button("Generar reporte", type="primary"):
+        with st.spinner("Redactando el reporte... el LLM puede tardar un rato"):
+            r = requests.get(
+                f"{API_URL}/reporte_comparativo/{puestos[titulo]}",
+                params={"idioma": idioma},
+                timeout=600,
+            )
+        st.session_state["reporte"] = r.json()
+        st.session_state["reporte_trabajo_id"] = puestos[titulo]
+
+    # mismo truco que en Analizar CV: sin session_state el clic en el
+    # download_button re-ejecuta el script y el reporte desapareceria
+    if "reporte" in st.session_state:
+        reporte = st.session_state["reporte"]
+        if "error" in reporte:
+            st.error(reporte["error"])
+        else:
+            st.subheader(f"{reporte['puesto']} — {reporte['cliente']}")
+            st.dataframe(reporte["candidatos"], use_container_width=True)
+            st.markdown("### Informe del agente")
+            st.markdown(reporte["informe"])
+
+            pdf = requests.post(
+                f"{API_URL}/reporte_comparativo/pdf",
+                data={
+                    "trabajo_id": st.session_state["reporte_trabajo_id"],
+                    "informe": reporte["informe"],
+                    "idioma": reporte.get("idioma", "es"),
+                },
+                timeout=30,
+            )
+            st.download_button(
+                "📄 Descargar reporte PDF",
+                data=pdf.content,
+                file_name=f"ixtli_reporte_{st.session_state['reporte_trabajo_id']}.pdf",
+                mime="application/pdf",
+            )

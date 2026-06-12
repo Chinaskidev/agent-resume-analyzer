@@ -8,8 +8,8 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from database import Analisis, Funcion, Perfil, SessionLocal, Cliente, Trabajo, Habilidad
-from prompts import PROMPT_SISTEMA, PLANTILLA_ANALISIS
-from reporte import generar_pdf_analisis
+from prompts import PROMPT_SISTEMA, PLANTILLA_ANALISIS, PROMPT_SISTEMA_REPORTE, PLANTILLA_REPORTE
+from reporte import generar_pdf_analisis, generar_pdf_reporte
 from motor import (
     calcular_match_score,
     calibrar_puntuacion,
@@ -72,6 +72,23 @@ def generar_feedback(texto_cv: str, nombre_del_cliente: str, funciones_del_traba
         model=LLM_MODEL,
         temperature=0.2,  # baja para que la PUNTUACION del LLM sea estable entre corridas
         messages=[{"role": "system", "content": PROMPT_SISTEMA[idioma]},
+                  {"role": "user", "content": prompt}]
+    )
+    return respuesta.choices[0].message.content
+
+
+# Redacta el informe comparativo de los candidatos de un puesto, en el idioma
+# del cliente que lo recibe (es/en). Las plantillas viven en prompts.py.
+def generar_reporte(nombre_del_cliente: str, titulo_trabajo: str, bloque_candidatos: str, idioma: str) -> str:
+    prompt = PLANTILLA_REPORTE[idioma].format(
+        nombre_del_cliente=nombre_del_cliente,
+        titulo_trabajo=titulo_trabajo,
+        bloque_candidatos=bloque_candidatos,
+    )
+    respuesta = cliente_llm.chat.completions.create(
+        model=LLM_MODEL,
+        temperature=0.2,
+        messages=[{"role": "system", "content": PROMPT_SISTEMA_REPORTE[idioma]},
                   {"role": "user", "content": prompt}]
     )
     return respuesta.choices[0].message.content
@@ -273,6 +290,82 @@ async def descargar_pdf_analisis(analisis_id: int, db: Session = Depends(obtener
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="ixtli_analisis_{analisis.id}.pdf"'},
+    )
+
+
+# Candidatos que entran al reporte comparativo de un puesto: el análisis más
+# reciente por candidato (si un CV se analizó dos veces va el último), ordenados
+# por puntaje y acotados a 10 para no desbordar el contexto del LLM.
+def candidatos_para_reporte(trabajo_id: int, db: Session) -> list:
+    todos = db.query(Analisis).filter(Analisis.trabajo_id == trabajo_id)\
+              .order_by(Analisis.creado_en.desc()).all()
+    vistos, candidatos = set(), []
+    for a in todos:
+        clave = (a.nombre_del_candidato or a.archivo).strip().lower()
+        if clave not in vistos:
+            vistos.add(clave)
+            candidatos.append(a)
+    candidatos.sort(key=lambda a: a.match_score, reverse=True)
+    return candidatos[:10]
+
+
+# Endpoint para generar el reporte comparativo de candidatos de un puesto.
+# `idioma` es el del cliente que recibe el reporte (es/en), no el de los CVs.
+@app.get("/reporte_comparativo/{trabajo_id}")
+async def reporte_comparativo(trabajo_id: int, idioma: str = "es", db: Session = Depends(obtener_db)):
+    idioma = "en" if idioma == "en" else "es"
+    trabajo = db.query(Trabajo).filter(Trabajo.id == trabajo_id).first()
+    if not trabajo:
+        return {"error": "Trabajo no encontrado"}
+
+    candidatos = candidatos_para_reporte(trabajo_id, db)
+    if not candidatos:
+        return {"error": "Este puesto no tiene análisis todavía"}
+
+    # por candidato van score, decisión y un extracto del feedback: el feedback
+    # completo de 10 candidatos desborda a un modelo 8B
+    bloque = "\n".join(
+        f"### {i}. {a.nombre_del_candidato or a.archivo} — {a.match_score}/10 ({a.decision})"
+        + (" [ALERTA: posible manipulación del CV]" if a.alerta_inyeccion else "")
+        + f"\nExtracto del análisis: {a.feedback[:400]}\n"
+        for i, a in enumerate(candidatos, 1)
+    )
+
+    informe = generar_reporte(trabajo.cliente.nombre, trabajo.titulo, bloque, idioma)
+    return {
+        "cliente": trabajo.cliente.nombre,
+        "puesto": trabajo.titulo,
+        "idioma": idioma,
+        "candidatos": [{
+            "nombre": a.nombre_del_candidato or a.archivo,
+            "match_score": a.match_score,
+            "decision": a.decision,
+        } for a in candidatos],
+        "informe": informe,
+    }
+
+
+# Endpoint para descargar el PDF del reporte comparativo. Recibe el informe ya
+# generado (lo tiene la interfaz): así descargar el PDF no vuelve a llamar al LLM.
+@app.post("/reporte_comparativo/pdf")
+async def descargar_pdf_reporte(
+    trabajo_id: int = Form(...),
+    informe: str = Form(...),
+    idioma: str = Form("es"),
+    db: Session = Depends(obtener_db)
+):
+    idioma = "en" if idioma == "en" else "es"
+    trabajo = db.query(Trabajo).filter(Trabajo.id == trabajo_id).first()
+    if not trabajo:
+        return {"error": "Trabajo no encontrado"}
+
+    candidatos = candidatos_para_reporte(trabajo_id, db)
+    pdf_bytes = generar_pdf_reporte(trabajo.titulo, trabajo.cliente.nombre, candidatos, informe, idioma)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="ixtli_reporte_{trabajo.id}.pdf"'},
     )
 
 
