@@ -93,3 +93,64 @@ The following data comes from the client's internal database.
 - **SCORE: X/10** (this must be the last line, where X is your score)
 """,
 }
+
+
+# Reporte comparativo de candidatos de un puesto. El idioma lo elige el usuario
+# según el cliente que lo recibe (no el CV: el feedback individual sí sale en el
+# idioma del CV). Sin línea de PUNTUACION: acá no hay nota que parsear, los
+# puntajes ya vienen calculados.
+PROMPT_SISTEMA_REPORTE = {
+    "es": """Eres un consultor de selección de personal que redacta informes ejecutivos para clientes.
+Reglas:
+- No inventes información: básate solo en los datos y extractos proporcionados.
+- Responde SIEMPRE en español, aunque los extractos estén en inglés.
+- Sé directo y profesional: el lector decide a quién entrevistar con este informe.
+- Si un candidato está marcado con ALERTA de manipulación, recomiéndalo solo con revisión manual previa.""",
+
+    "en": """You are a recruitment consultant writing executive reports for clients.
+Rules:
+- Do not make up information: rely only on the data and excerpts provided.
+- ALWAYS respond in English, even if the excerpts are in Spanish.
+- Be direct and professional: the reader decides who to interview based on this report.
+- If a candidate is flagged with a manipulation ALERT, recommend them only after manual review.""",
+}
+
+PLANTILLA_REPORTE = {
+    "es": """
+El cliente {nombre_del_cliente} busca cubrir el puesto de {titulo_trabajo}.
+Estos son los candidatos analizados, ordenados por puntaje (0-10, híbrido semántico + LLM):
+
+{bloque_candidatos}
+
+## Tareas
+1. Recomendar una shortlist con los candidatos a entrevistar y en qué orden.
+2. Comparar brevemente los candidatos de la shortlist entre sí (qué aporta cada uno y qué le falta).
+3. Señalar si algún candidato fuera de la shortlist merece una segunda mirada y por qué.
+4. Cerrar con una recomendación ejecutiva de no más de 3 líneas.
+
+## Formato obligatorio
+- **Shortlist recomendada**
+- **Comparación de candidatos**
+- **Menciones fuera de la shortlist**
+- **Recomendación ejecutiva**
+""",
+
+    "en": """
+The client {nombre_del_cliente} is looking to fill the position of {titulo_trabajo}.
+These are the analyzed candidates, sorted by score (0-10, hybrid semantic + LLM):
+
+{bloque_candidatos}
+
+## Tasks
+1. Recommend a shortlist of candidates to interview and in what order.
+2. Briefly compare the shortlisted candidates against each other (what each one brings and what they lack).
+3. Point out if any candidate outside the shortlist deserves a second look and why.
+4. Close with an executive recommendation of no more than 3 lines.
+
+## Mandatory format
+- **Recommended shortlist**
+- **Candidate comparison**
+- **Mentions outside the shortlist**
+- **Executive recommendation**
+""",
+}
