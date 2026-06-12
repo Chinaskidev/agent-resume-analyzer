@@ -197,35 +197,60 @@ def generar_feedback(texto_cv: str, nombre_del_cliente: str, funciones_del_traba
 
     respuesta = cliente_llm.chat.completions.create(
         model=LLM_MODEL,
+        temperature=0.2,  # baja para que la PUNTUACION del LLM sea estable entre corridas
         messages=[{"role": "system", "content": PROMPT_SISTEMA[idioma]},
                   {"role": "user", "content": prompt}]
     )
     return respuesta.choices[0].message.content
 
 
+# Extrae la puntuacion 0-10 que el LLM escribe al final del feedback
+# (linea "PUNTUACION: X/10" o "SCORE: X/10"). Devuelve None si no la encuentra.
+def extraer_puntuacion_llm(feedback: str):
+    coincidencias = re.findall(
+        r"(?:PUNTUACI[OÓ]N|SCORE)\s*:?\s*\**\s*(\d{1,2}(?:[.,]\d+)?)\s*/\s*10",
+        feedback, re.IGNORECASE
+    )
+    if not coincidencias:
+        return None
+    valor = float(coincidencias[-1].replace(",", "."))
+    return min(10.0, max(0.0, valor))
+
+
 # Calibra el coseno (0-1) a una escala 0-10.
 # Con el modelo multilingue y el match por fragmentos, los cosenos reales van de
 # ~0.25 (sin relacion) a ~0.65 (match muy fuerte): ese rango se mapea linealmente
 # a 0-10, sin saltos. Recalibrar con la distribucion de raw_score acumulada.
-def puntuacion(match_score: float):
+def calibrar_puntuacion(match_score: float) -> float:
     PISO, TECHO = 0.25, 0.65
     normalizado = (match_score - PISO) / (TECHO - PISO)
     # Redondear antes de decidir: evita que un 7.9999 por floats muestre
     # "8.0" con decision "Promedio Alto"
-    score = round(max(0.0, min(1.0, normalizado)) * 10, 2)
+    return round(max(0.0, min(1.0, normalizado)) * 10, 2)
 
+
+# Combina el puntaje semantico con el del LLM. El semantico mide si el CV es
+# del rubro correcto (un chef no engaña al coseno); el LLM mide la calificacion
+# real (dos CVs del mismo rubro dan cosenos casi iguales aunque uno sea flojo).
+# Si el LLM no devolvio puntuacion parseable, queda solo el semantico.
+PESO_SEMANTICO = 0.4
+
+def combinar_puntuaciones(puntaje_semantico: float, puntaje_llm) -> float:
+    if puntaje_llm is None:
+        return puntaje_semantico
+    return round(PESO_SEMANTICO * puntaje_semantico + (1 - PESO_SEMANTICO) * puntaje_llm, 2)
+
+
+def decidir(score: float) -> str:
     if score >= 8.0:
-        decision = "Alto"
+        return "Alto"
     elif score >= 7.0:
-        decision = "Promedio Alto"
+        return "Promedio Alto"
     elif score >= 6.0:
-        decision = "Promedio Bajo"
+        return "Promedio Bajo"
     elif score >= 4.0:
-        decision = "Bajo"
-    else:
-        decision = "Deficiente"
-
-    return score, decision
+        return "Bajo"
+    return "Deficiente"
 
 
 #Analizar un CV y obtener políticas del cliente
@@ -260,15 +285,20 @@ async def analizar_cv(
 
     match_score = calcular_match_score(texto_cv, funciones_del_trabajo, habilidades, perfil_del_trabajador)
 
-    puntuacion_calibrada, decision = puntuacion(match_score)
+    # Puntaje hibrido: semantico (rubro correcto) + LLM (calificacion real)
+    puntaje_semantico = calibrar_puntuacion(match_score)
+    puntaje_llm = extraer_puntuacion_llm(feedback)
+    puntuacion_final = combinar_puntuaciones(puntaje_semantico, puntaje_llm)
+    decision = decidir(puntuacion_final)
 
     # Guardar el analisis en el historial
     nuevo_analisis = Analisis(
         nombre_del_candidato=nombre_del_candidato,
         archivo=archivo.filename,
         titulo_trabajo=trabajo.titulo,
-        match_score=puntuacion_calibrada,
+        match_score=puntuacion_final,
         raw_score=match_score,
+        puntaje_llm=puntaje_llm,
         decision=decision,
         feedback=feedback if feedback is not None else "No se pudo generar feedback",
         trabajo_id=trabajo.id
@@ -283,7 +313,9 @@ async def analizar_cv(
         "titulo_trabajo": trabajo.titulo,
         "nombre_del_candidato": nombre_del_candidato,
         "idioma": idioma,
-        "match_score": puntuacion_calibrada,
+        "match_score": puntuacion_final,
+        "puntaje_semantico": puntaje_semantico,
+        "puntaje_llm": puntaje_llm,
         "decision": decision,
         "feedback": nuevo_analisis.feedback,
         "creado_en": nuevo_analisis.creado_en
