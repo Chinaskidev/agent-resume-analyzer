@@ -8,7 +8,7 @@ API_URL = os.getenv("API_URL", "http://localhost:8000")
 st.set_page_config(page_title="Ixtli - Analizador de CVs", page_icon="📄", layout="wide")
 
 st.sidebar.title("📄 Ixtli")
-vista = st.sidebar.radio("Menú", ["Analizar CV", "Agregar puesto", "Historial"])
+vista = st.sidebar.radio("Menú", ["Analizar CV", "Agregar puesto", "Buscar análisis"])
 
 
 if vista == "Analizar CV":
@@ -99,17 +99,43 @@ elif vista == "Agregar puesto":
             st.success(r.json()["message"])
 
 
-elif vista == "Historial":
-    st.title("Historial de análisis")
+elif vista == "Buscar análisis":
+    st.title("Buscar análisis")
 
-    analisis = requests.get(f"{API_URL}/analisis/", timeout=10).json()
+    clientes = requests.get(f"{API_URL}/clientes/", timeout=10).json()
+    col1, col2, col3 = st.columns(3)
+    cliente = col1.selectbox("Cliente", ["Todos"] + [c["nombre"] for c in clientes])
+    candidato = col2.text_input("Candidato")
+    puesto = col3.text_input("Puesto")
+
+    col4, col5 = st.columns(2)
+    decision = col4.selectbox(
+        "Decisión", ["Todas", "Alto", "Promedio Alto", "Promedio Bajo", "Bajo", "Deficiente"]
+    )
+    fechas = col5.date_input("Rango de fechas", value=())
+
+    params = {}
+    if cliente != "Todos":
+        params["cliente"] = cliente
+    if candidato:
+        params["candidato"] = candidato
+    if puesto:
+        params["puesto"] = puesto
+    if decision != "Todas":
+        params["decision"] = decision
+    # mientras el usuario elige el rango, date_input devuelve una sola fecha
+    if len(fechas) == 2:
+        params["desde"] = fechas[0].isoformat()
+        params["hasta"] = fechas[1].isoformat()
+
+    analisis = requests.get(f"{API_URL}/analisis/", params=params, timeout=10).json()
     if not analisis:
-        st.info("Todavía no hay análisis guardados.")
+        st.info("No hay análisis que coincidan con los filtros.")
     else:
         st.dataframe(analisis, use_container_width=True)
 
         opciones = {
-            f"#{a['id']} - {a['nombre_del_candidato'] or a['archivo']} ({a['titulo_trabajo']})": a["id"]
+            f"#{a['id']} - {a['nombre_del_candidato'] or a['archivo']} ({a['cliente']} / {a['titulo_trabajo']})": a["id"]
             for a in analisis
         }
         seleccion = st.selectbox("Descargar informe de:", list(opciones.keys()))
