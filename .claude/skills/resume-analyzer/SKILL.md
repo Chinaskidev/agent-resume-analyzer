@@ -19,7 +19,7 @@ description: Guía del motor de análisis de CVs de Ixtli. Usar cuando se trabaj
 
 Respuesta: `{id, archivo, titulo_trabajo, nombre_del_candidato, idioma, match_score (0-10 híbrido), puntaje_semantico, puntaje_llm, decision, feedback, creado_en}`.
 
-`GET /analisis/` lista el historial (sin el campo `feedback`, que contiene datos del CV).
+`GET /analisis/` lista el historial (sin el campo `feedback`, que contiene datos del CV). `GET /analisis/{id}/pdf` descarga el informe PDF con marca de agua de Ixtli (generado en `reporte.py` con fpdf2; helvetica es latin-1, `_latin1()` sanea el texto del LLM).
 
 ## Correr el proyecto
 

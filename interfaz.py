@@ -43,7 +43,12 @@ if vista == "Analizar CV":
                 files={"archivo": (archivo.name, archivo.getvalue())},
                 timeout=600,
             )
-        resultado = r.json()
+        st.session_state["resultado"] = r.json()
+
+    # el resultado se muestra fuera del if del boton: el clic en download_button
+    # re-ejecuta el script y sin session_state desapareceria de la pantalla
+    if "resultado" in st.session_state:
+        resultado = st.session_state["resultado"]
 
         # la API devuelve errores de negocio con HTTP 200 y {"error": ...}
         if "error" in resultado:
@@ -59,6 +64,14 @@ if vista == "Analizar CV":
             col3.metric("Idioma del CV", resultado["idioma"].upper())
             st.markdown("### Feedback del agente")
             st.markdown(resultado["feedback"])
+
+            pdf = requests.get(f"{API_URL}/analisis/{resultado['id']}/pdf", timeout=30)
+            st.download_button(
+                "📄 Descargar informe PDF",
+                data=pdf.content,
+                file_name=f"ixtli_analisis_{resultado['id']}.pdf",
+                mime="application/pdf",
+            )
 
 
 elif vista == "Agregar puesto":
@@ -94,3 +107,16 @@ elif vista == "Historial":
         st.info("Todavía no hay análisis guardados.")
     else:
         st.dataframe(analisis, use_container_width=True)
+
+        opciones = {
+            f"#{a['id']} - {a['nombre_del_candidato'] or a['archivo']} ({a['titulo_trabajo']})": a["id"]
+            for a in analisis
+        }
+        seleccion = st.selectbox("Descargar informe de:", list(opciones.keys()))
+        pdf = requests.get(f"{API_URL}/analisis/{opciones[seleccion]}/pdf", timeout=30)
+        st.download_button(
+            "📄 Descargar PDF",
+            data=pdf.content,
+            file_name=f"ixtli_analisis_{opciones[seleccion]}.pdf",
+            mime="application/pdf",
+        )

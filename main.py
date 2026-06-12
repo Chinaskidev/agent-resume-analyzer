@@ -1,12 +1,13 @@
 import os
 import uvicorn
-from fastapi import FastAPI, UploadFile, File, Form, Depends
+from fastapi import FastAPI, UploadFile, File, Form, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 from database import Analisis, Funcion, Perfil, SessionLocal, Cliente, Trabajo, Habilidad
 from prompts import PROMPT_SISTEMA, PLANTILLA_ANALISIS
+from reporte import generar_pdf_analisis
 from motor import (
     calcular_match_score,
     calibrar_puntuacion,
@@ -229,6 +230,23 @@ async def listar_analisis(db: Session = Depends(obtener_db)):
         "alerta_inyeccion": a.alerta_inyeccion,
         "creado_en": a.creado_en
     } for a in analisis]
+
+
+# Endpoint para descargar el informe PDF de un analisis
+@app.get("/analisis/{analisis_id}/pdf")
+async def descargar_pdf_analisis(analisis_id: int, db: Session = Depends(obtener_db)):
+    analisis = db.query(Analisis).filter(Analisis.id == analisis_id).first()
+    if not analisis:
+        return {"error": "Análisis no encontrado"}
+
+    nombre_cliente = analisis.trabajo.cliente.nombre if analisis.trabajo and analisis.trabajo.cliente else ""
+    pdf_bytes = generar_pdf_analisis(analisis, nombre_cliente)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="ixtli_analisis_{analisis.id}.pdf"'},
+    )
 
 
 # Verificación de que FastAPI está funcionando en producción
