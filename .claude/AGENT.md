@@ -66,7 +66,7 @@ alembic upgrade head                   # aplicar migraciones
 - Código y comentarios en **español**; clases, columnas, endpoints y campos de formulario también (`/agregar_trabajo/`, `nombre_del_cliente`, `Cliente.nombre`). Mantén la consistencia.
 - El comportamiento del agente analizador (reglas, formato, idiomas) se edita en **`prompts.py`**, no en `main.py`.
 - Mensajes de commit en español, descriptivos, en presente ("añadiendo endpoint X", "solucionando Y").
-- No hay tests todavía; si añades lógica al motor de análisis, añade tests con `pytest` en `tests/`.
+- Tests con `pytest` en `tests/` (correr con `python -m pytest`; el `conftest.py` de la raíz permite importar `main`). La lógica de scoring (fragmentar, calibrar, parsear puntuación del LLM, combinar, decidir) está cubierta como funciones puras sin DB ni LLM — si tocas el motor, actualiza/añade tests. Los tests de calibración documentan los valores vigentes: al recalibrar, actualizarlos a conciencia.
 
 ## Deudas técnicas conocidas (no las repitas, arréglalas si tocas esa zona)
 
