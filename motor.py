@@ -116,6 +116,16 @@ def extraer_puntuacion_llm(feedback: str):
     return min(10.0, max(0.0, valor))
 
 
+# Esto quita la linea final "PUNTUACION: X/10" / "SCORE: X/10" del feedback: es un
+# dato interno del puntaje hibrido (ya guardado en puntaje_llm) y lo borre porque confunde al
+# que lee el informe.
+def quitar_linea_puntuacion(feedback: str) -> str:
+    return re.sub(
+        r"\s*\**\s*(?:PUNTUACI[OÓ]N|SCORE)\s*:?\s*\**\s*\d{1,2}(?:[.,]\d+)?\s*/\s*10\s*\**\s*$",
+        "", feedback, flags=re.IGNORECASE
+    ).rstrip()
+
+
 # Calibra el coseno (0-1) a una escala 0-10.
 # Con el modelo multilingue y el match por fragmentos, los cosenos reales van de
 # ~0.25 (sin relacion) a ~0.65 (match muy fuerte): ese rango se mapea linealmente

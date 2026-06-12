@@ -19,6 +19,7 @@ from motor import (
     detectar_inyeccion,
     extraer_puntuacion_llm,
     extraer_texto,
+    quitar_linea_puntuacion,
 )
 
 # Cargar variables de entorno
@@ -182,6 +183,9 @@ async def analizar_cv(
     # Con alerta de inyeccion el numero del LLM no es confiable: cae al semantico.
     puntaje_semantico = calibrar_puntuacion(match_score)
     puntaje_llm = None if alerta_inyeccion else extraer_puntuacion_llm(feedback)
+    # Recien despues de parsear la nota se limpia la linea "SCORE: X/10":
+    # es un dato interno y confunde en el informe que lee el cliente
+    feedback = quitar_linea_puntuacion(feedback)
     puntuacion_final = combinar_puntuaciones(puntaje_semantico, puntaje_llm)
     decision = decidir(puntuacion_final)
 

@@ -15,6 +15,7 @@ from motor import (
     detectar_inyeccion,
     extraer_puntuacion_llm,
     fragmentar,
+    quitar_linea_puntuacion,
 )
 
 
@@ -107,6 +108,30 @@ def test_extraer_puntuacion_toma_la_ultima_si_hay_varias():
 
 def test_extraer_puntuacion_sin_linea_devuelve_none():
     assert extraer_puntuacion_llm("El candidato es bueno pero no dejo puntaje.") is None
+
+
+# ==========================================================
+# quitar_linea_puntuacion (limpia el dato interno del informe)
+# ==========================================================
+
+@pytest.mark.parametrize("feedback", [
+    "Buen candidato.\n\nSCORE: 7/10",
+    "Buen candidato.\n\n**PUNTUACIÓN: 8.5/10**",
+    "Buen candidato.\nPuntuacion: 6,5 / 10",
+])
+def test_quitar_linea_puntuacion_formatos(feedback):
+    assert quitar_linea_puntuacion(feedback) == "Buen candidato."
+
+
+def test_quitar_linea_puntuacion_sin_linea_no_toca_el_feedback():
+    feedback = "El candidato es bueno pero no dejo puntaje."
+    assert quitar_linea_puntuacion(feedback) == feedback
+
+
+def test_quitar_linea_puntuacion_solo_quita_la_del_final():
+    # una mencion en medio del texto no debe borrarse (solo la linea final)
+    feedback = "El sistema calculó SCORE: 5/10 antes.\nResto del análisis."
+    assert quitar_linea_puntuacion(feedback) == feedback
 
 
 def test_extraer_puntuacion_placeholder_sin_numero_devuelve_none():
