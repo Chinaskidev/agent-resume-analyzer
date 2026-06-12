@@ -1,4 +1,6 @@
+from datetime import date
 import os
+from sqlalchemy import func
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, Form, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -216,12 +218,34 @@ async def analizar_cv(
         }
 
 
-# Endpoint para listar el historial de analisis
+# Endpoint para listar el historial de analisis con filtros opcionales
 @app.get("/analisis/")
-async def listar_analisis(db: Session = Depends(obtener_db)):
-    analisis = db.query(Analisis).order_by(Analisis.creado_en.desc()).all()
-    return [{
+async def listar_analisis(
+    cliente: str | None = None,
+    candidato: str | None = None,
+    puesto: str | None = None,
+    decision: str | None = None,
+    desde: date | None = None,
+    hasta: date | None = None,
+    db: Session = Depends(obtener_db)
+):
+    consulta = db.query(Analisis).join(Trabajo).join(Cliente)
+    if cliente:
+        consulta = consulta.filter(Cliente.nombre == cliente)
+    if candidato:
+        consulta = consulta.filter(Analisis.nombre_del_candidato.ilike(f"%{candidato}%"))
+    if puesto:
+        consulta = consulta.filter(Analisis.titulo_trabajo.ilike(f"%{puesto}%"))
+    if decision:
+        consulta = consulta.filter(Analisis.decision == decision)
+    if desde:
+        consulta = consulta.filter(func.date(Analisis.creado_en) >= desde)
+    if hasta:
+        consulta = consulta.filter(func.date(Analisis.creado_en) <= hasta)
+    analisis = consulta.order_by(Analisis.creado_en.desc()).all()
+    return[{
         "id": a.id,
+        "cliente": a.trabajo.cliente.nombre,
         "nombre_del_candidato": a.nombre_del_candidato,
         "archivo": a.archivo,
         "titulo_trabajo": a.titulo_trabajo,
@@ -230,7 +254,6 @@ async def listar_analisis(db: Session = Depends(obtener_db)):
         "alerta_inyeccion": a.alerta_inyeccion,
         "creado_en": a.creado_en
     } for a in analisis]
-
 
 # Endpoint para descargar el informe PDF de un analisis
 @app.get("/analisis/{analisis_id}/pdf")
