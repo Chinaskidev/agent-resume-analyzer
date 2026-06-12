@@ -14,7 +14,7 @@ vista = st.sidebar.radio("Menú", ["Analizar CV", "Agregar puesto", "Historial"]
 if vista == "Analizar CV":
     st.title("Analizar CV")
 
-    clientes = requests.get(f"{API_URL}/clientes/").json()
+    clientes = requests.get(f"{API_URL}/clientes/", timeout=10).json()
     nombres = [c["nombre"] for c in clientes]
     if not nombres:
         st.warning("No hay clientes todavía. Crea un puesto primero en 'Agregar puesto'.")
@@ -22,7 +22,7 @@ if vista == "Analizar CV":
 
     nombre_del_cliente = st.selectbox("Cliente", nombres)
 
-    trabajos = requests.get(f"{API_URL}/obtener_trabajos_por_cliente/{nombre_del_cliente}").json()
+    trabajos = requests.get(f"{API_URL}/obtener_trabajos_por_cliente/{nombre_del_cliente}", timeout=10).json()
     if not isinstance(trabajos, list) or not trabajos:
         st.warning("Este cliente no tiene puestos registrados.")
         st.stop()
@@ -82,14 +82,14 @@ elif vista == "Agregar puesto":
                 "perfil_del_trabajador": perfil_del_trabajador,
                 "funciones_del_trabajo": funciones_del_trabajo,
                 "habilidades": habilidades,
-            })
+            }, timeout=10)
             st.success(r.json()["message"])
 
 
 elif vista == "Historial":
     st.title("Historial de análisis")
 
-    analisis = requests.get(f"{API_URL}/analisis/").json()
+    analisis = requests.get(f"{API_URL}/analisis/", timeout=10).json()
     if not analisis:
         st.info("Todavía no hay análisis guardados.")
     else:

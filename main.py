@@ -137,11 +137,6 @@ def extraer_texto(archivo: UploadFile) -> str:
 
 
 
-# Función para extraer experiencia en años usando expresiones regulares
-def extraer_experiencia(texto: str) -> list:
-    experiencia = re.findall(r"(\d+)\s*(?:años|years)", texto)
-    return experiencia if experiencia else []
-
 # Detecta el idioma del CV para responder en el mismo idioma
 def detectar_idioma(texto: str) -> str:
     texto_limpio = texto.replace("\n", " ").strip()
