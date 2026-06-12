@@ -20,7 +20,7 @@ Actúa como un **Científico de Datos Senior Full-Stack**. Combinas tres perfile
 
 **Ixtli** es un analizador de CVs con IA para reclutamiento. Backend FastAPI + interfaz de demo en Streamlit (`interfaz.py`, consume la API por HTTP), PostgreSQL como base de datos, LLM local vía Ollama. El despliegue viejo (Railway + frontend de Vercel) quedó obsoleto tras el renombrado de la API a español.
 
-### Arquitectura del motor de análisis (`main.py` + `prompts.py`)
+### Arquitectura del motor de análisis (`motor.py` + `prompts.py`; endpoints en `main.py`)
 
 El endpoint `/analizar/` recibe un CV (PDF o DOCX) + título del puesto + nombre del cliente (+ candidato opcional), y produce un **puntaje híbrido**:
 
@@ -66,7 +66,7 @@ alembic upgrade head                   # aplicar migraciones
 - Código y comentarios en **español**; clases, columnas, endpoints y campos de formulario también (`/agregar_trabajo/`, `nombre_del_cliente`, `Cliente.nombre`). Mantén la consistencia.
 - El comportamiento del agente analizador (reglas, formato, idiomas) se edita en **`prompts.py`**, no en `main.py`.
 - Mensajes de commit en español, descriptivos, en presente ("añadiendo endpoint X", "solucionando Y").
-- Tests con `pytest` en `tests/` (correr con `python -m pytest`; el `conftest.py` de la raíz permite importar `main`). La lógica de scoring (fragmentar, calibrar, parsear puntuación del LLM, combinar, decidir) está cubierta como funciones puras sin DB ni LLM — si tocas el motor, actualiza/añade tests. Los tests de calibración documentan los valores vigentes: al recalibrar, actualizarlos a conciencia.
+- Tests con `pytest` en `tests/` (correr con `python -m pytest`; el `conftest.py` de la raíz permite importar los módulos del repo). Toda la lógica de `motor.py` (fragmentar, calibrar, parsear puntuación del LLM, combinar, decidir, detectar inyecciones) está cubierta sin DB ni LLM y corre en <1s gracias a la carga perezosa del modelo — si tocas el motor, actualiza/añade tests. Los tests de calibración documentan los valores vigentes: al recalibrar, actualizarlos a conciencia.
 
 ## Deudas técnicas conocidas (no las repitas, arréglalas si tocas esa zona)
 

@@ -7,7 +7,7 @@ description: Guía del motor de análisis de CVs de Ixtli. Usar cuando se trabaj
 
 ## Flujo del análisis
 
-`POST /analizar/` (multipart form: `archivo`, `titulo_de_trabajo`, `nombre_del_cliente`, `nombre_del_candidato` opcional) ejecuta este pipeline en `main.py`:
+`POST /analizar/` (multipart form: `archivo`, `titulo_de_trabajo`, `nombre_del_cliente`, `nombre_del_candidato` opcional) ejecuta este pipeline (endpoint en `main.py`, todas las funciones del motor en `motor.py`):
 
 1. **Lookup en DB**: busca `Cliente` por nombre y `Trabajo` por título + cliente. Si no existen devuelve `{"error": ...}` con HTTP 200 (ojo: no usa códigos de error HTTP).
 2. **Contexto del puesto**: concatena `trabajo.funciones`, `trabajo.habilidades` y `trabajo.perfil` en strings separados por coma ("No especificado" si están vacíos).
@@ -76,5 +76,5 @@ Tablas y modelos en español, definidos en `database.py`, migraciones con Alembi
 - Para cambiar cómo analiza el agente (reglas, formato, idiomas) se edita `prompts.py`, no el código de `main.py`. Si se agrega un idioma hay que añadir su clave en `PROMPT_SISTEMA` y `PLANTILLA_ANALISIS` y mapearlo en el endpoint.
 - CORS permite solo `localhost:3000` y `frontend-resume-analyzer.vercel.app`; si el frontend cambia de dominio hay que tocar `main.py`. El frontend viejo espera la API en inglés (`/analyze/`, `match_score` 0–1) — quedó incompatible desde el issue-6; se va a crear una interfaz nueva.
 - Los CVs son datos personales: no loguear `texto_cv` ni guardarlo sin necesidad (el feedback guardado en `analisis` ya contiene extractos del CV — no exponerlo en listados públicos).
-- **Inyección de prompt vía CV**: el texto del CV entra al prompt del LLM. Defensas: delimitadores `<<<INICIO_CV>>>/<<<FIN_CV>>>` + regla en el prompt de sistema (`prompts.py`), y `detectar_inyeccion` (`PATRONES_INYECCION` en `main.py`, con tests). Los patrones son deliberadamente específicos para no penalizar CVs inocentes ("redacté instrucciones de trabajo" no dispara). Si agregas patrones, agrega también casos legítimos a los tests de no-disparo.
+- **Inyección de prompt vía CV**: el texto del CV entra al prompt del LLM. Defensas: delimitadores `<<<INICIO_CV>>>/<<<FIN_CV>>>` + regla en el prompt de sistema (`prompts.py`), y `detectar_inyeccion` (`PATRONES_INYECCION` en `motor.py`, con tests). Los patrones son deliberadamente específicos para no penalizar CVs inocentes ("redacté instrucciones de trabajo" no dispara). Si agregas patrones, agrega también casos legítimos a los tests de no-disparo.
 - Nunca imprimir API keys al arrancar (el repo original lo hacía).

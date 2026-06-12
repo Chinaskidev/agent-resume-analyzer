@@ -1,4 +1,4 @@
-# Tests de la logica de scoring: funciones puras de main.py, sin DB ni LLM.
+# Tests de la logica de scoring: funciones puras de motor.py, sin DB ni LLM.
 # Correr con: .virtual/bin/python -m pytest
 #
 # Ojo: calibrar_puntuacion y decidir documentan la calibracion vigente
@@ -7,7 +7,7 @@
 
 import pytest
 
-from main import (
+from motor import (
     PESO_SEMANTICO,
     calibrar_puntuacion,
     combinar_puntuaciones,
